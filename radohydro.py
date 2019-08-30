@@ -7,6 +7,7 @@
 """
 
 __author__ = "Erik Nixdorf, Marco Hannemann"
+__propertyof__="Helmholtz-Zentrum fuer Umweltforschung GmbH - UFZ. "
 __email__ = "erik.nixdorf@ufz.de, marco.hannemann@ufz.de"
 __version__ = "0.3"
 import time
@@ -299,7 +300,7 @@ def processradolan(start_date, end_date, shapefile, output, buffercell=2):
             gdfbnd['BasinIDNew']=precipitationbasinsorted[:,-2]
             gdfbnd['average_cellweight']=precipitationbasinsorted[:,-3]
             gdfbnd['basin_area']=precipitationbasinsorted[:,-1]
-            gdfbnd.to_file(os.path.join(os.getcwd(),shapefile[:-4]+'_Updated.shp'))
+            gdfbnd.to_file(os.path.join(os.getcwd(),'Data',shapefile[:-4]+'_Updated.shp'))
     shutil.rmtree(os.path.join(SystemPath,'RadolanData'))
     print('\nOutput saved to /Data')
     
