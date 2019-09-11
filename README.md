@@ -17,6 +17,8 @@ Radohydro is a small python tool which converts and projects time series precipi
 * shapely
 
 ## Limitations
+<span style="color:red">**Important: Currently fiona and rasterio package cant be installed together due to a version conflict with gdal (gdal.2.x vs gdal 3.0). As soon as this is fixed radohydro 0.4 will be released which will have less lines of code and higher performance by applying rasterstats package**</span>.
+
 * until now supports only download of hourly datasets
 * for more than 500 precipation records(~21days), output as shp is not supported (dbase problem)
 * large amounts of polygons per shapefile (>10000) may lead to considerable performance decrease
