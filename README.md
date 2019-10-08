@@ -1,32 +1,37 @@
 # RadoHydro
 
-Radohydro is a small python tool which converts and projects time series precipitation records from DWD Radolan data on polygon shapefiles (e.g. representing subcatchments/catchments)
+Radohydro is a small python tool which processes time series precipitation records from DWD Radolan data and among others map them on polygon shapefiles (e.g. representing subcatchments/catchments)
 
 ## Features
 * Automatize download and unzip from dwd ftp server for given time interval
-* Automatic reprojection to destination EPSG given by shapefile
+* Fully stream-based solution
+* Automatic reprojection to destination EPSG given by user
 * Equal-area approach to compute precipitation rates per basin per time
-* Output 1) as csv files containing time series for each basin and <br/>2) as polygonshapes having the precipitation rates as attribute tables
+* Output 1) as csv files containing time series for each basin and <br/>2) as polygon shapefile having the precipitation rates as attribute tables
 
 ## Dependencies
 
 * Python 3
 * numpy
 * geopandas
-* gdal
 * shapely
+* rasterio
+* gdal
 
 ## Limitations
-<span style="color:red">**Important: Currently fiona and rasterio package cant be installed together due to a version conflict with gdal (gdal.2.x vs gdal 3.0). As soon as this is fixed radohydro 0.4 will be released which will have less lines of code and higher performance by applying rasterstats package**</span>.
 
-* until now supports only download of hourly datasets
+* until now supports only download of hourly datasets and full day downloads
 * for more than 500 precipation records(~21days), output as shp is not supported (dbase problem)
 * large amounts of polygons per shapefile (>10000) may lead to considerable performance decrease
-* required radolan files are downloaded again every time the script runs
 
 ```python
+# Quickstart
 import radohydro
-radohydro.processradolan('2017123020', '2018010220','einzugsgebiet.shp', output=True)
+radohydro.radohydro(start_date='20171230',
+              end_date='20180102',
+              shape_inpt='.\Examples\einzugsgebiet.shp',
+              outpt_proj='epsg:25833',
+              Output=True):
 ```
 
 ## Authors
@@ -38,6 +43,6 @@ radohydro.processradolan('2017123020', '2018010220','einzugsgebiet.shp', output=
 
 ## Acknowledgments
 
-* Thx to Nico Trauth for improving the code
+* Thx to Nico Trauth for improving the code and the discussions
 
 
