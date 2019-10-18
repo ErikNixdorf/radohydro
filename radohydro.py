@@ -98,9 +98,19 @@ def buffered_raster_clipping(raster_inpt,
             # if no shape is given no clipping will be done:
             print('No readable clipping file defined')
             exit()
-    #reprojec
-    gdfbnd = gdfbnd.to_crs(crs=r_proj)
-    print('Boundary GIS vectorfile was reprojected to Raster projection')
+    #reproject depending on what have entered as information
+    if r_proj.find('epsg')!=-1:
+        try: 
+            epsg_code=int(r_proj[5:])
+            gdfbnd.to_crs(epsg=epsg_code,inplace=True)
+            print('Boundary GIS vectorfile was reprojected to Raster projection')
+        except Exception as e:
+                print('error converting epsg code')
+                print(e)
+    else:
+        #if not we simply use projection str
+        gdfbnd=gdfbnd.to_crs(crs=r_proj)
+        print('Boundary GIS vectorfile was reprojected to Raster projection')
     #gdfbnd.to_file('test_example.shp')
     # Find the clipping window
     cellsize = abs(min((abs(r_transform[1]), abs(r_transform[5]))))
