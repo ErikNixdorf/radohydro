@@ -449,7 +449,7 @@ def compute_polyg_precip(gdfclip,
                          gdfbnd,
                          precip_colmns='AllDigits',
                          Output=True,
-                         outpt_proj='epsg:25833',outpt_nm='radohydro')):
+                         outpt_proj='epsg:25833',outpt_nm='radohydro'):
     """
     This Function basically sums of all cells which belong to the same basin ID (polygon
     A Weighted average approach is used
