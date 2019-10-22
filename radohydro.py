@@ -449,7 +449,7 @@ def compute_polyg_precip(gdfclip,
                          gdfbnd,
                          precip_colmns='AllDigits',
                          Output=True,
-                         outpt_proj='epsg:25833'):
+                         outpt_proj='epsg:25833',outpt_nm='radohydro')):
     """
     This Function basically sums of all cells which belong to the same basin ID (polygon
     A Weighted average approach is used
@@ -519,7 +519,7 @@ def compute_polyg_precip(gdfclip,
         #write out the numpy array
         for basin in precipitationbasin:
             with open(
-                    '.\Data\\radolanData_{!s}.csv'.format(basin[-2]),
+                    '.\Data\\'+outpt_nm+'_{!s}.csv'.format(basin[-2]),
                     'w',
                     newline='') as fout:
                 fout.write('basin ID: {:d}\n'.format(int(basin[-2])))
@@ -551,6 +551,48 @@ def compute_polyg_precip(gdfclip,
         print('\nOutput saved to /Data')
 
     return precipitationbasin
+
+
+def rasterizegeo(shp_inpt='.\example\einzugsgebiet.shp',pixel_sz=(100,100),atrbt_nm='gridcode',Output=True,Output_nm='test.tif'):
+    """
+    Created on Tue Oct 22 12:15:13 2019
+    A small tool which converts shapefiles and a selectable feature to rasterfiles
+    Heavily exploits rasterize.features.rasterize functionality
+    @author: nixdorf
+    """
+    
+    #%% import external libraries
+    import rasterio
+    import affine # transformation issues
+    import geopandas as gpd
+    from rasterio import features
+
+    #%% start processinghttps://sigon.gitlab.io/post/2019-05-02-rasterize/
+    #open geometry to geopandas
+    if isinstance(shp_inpt,str):
+        gdf_inpt=gpd.GeoDataFrame.from_file(shp_inpt)
+    else:
+        gdf_inpt=shp_inpt.copy()
+    
+    rst_transform=affine.Affine(pixel_sz[0],0,gdf_inpt.total_bounds[0],0,-pixel_sz[1],gdf_inpt.total_bounds[3])
+    rst_shape=(int((gdf_inpt.total_bounds[2]-gdf_inpt.total_bounds[0])/pixel_sz[0]),int((gdf_inpt.total_bounds[3]-gdf_inpt.total_bounds[1])/pixel_sz[1]))
+    rst_data = features.rasterize(shapes = gdf_inpt[['geometry', atrbt_nm]].values.tolist(),out_shape=(rst_shape[1],rst_shape[0]), transform=rst_transform,fill=-9999)
+    
+    
+    
+    if Output:    
+        with rasterio.open(
+            Output_nm, 'w',
+            driver='GTiff',
+            transform = rst_transform,
+            dtype=rasterio.float64,
+            crs=gdf_inpt.crs['init'],
+            count=1,
+            nodata=-9999,
+            width=rst_shape[0],
+            height=rst_shape[1]) as dst:
+                dst.write(rst_data.astype(float), indexes=1)
+                
 
 
 #define a main function which calls all other subfunctions
