@@ -251,8 +251,19 @@ def rado_io(start_date='20171231',
             for dt, file in product(dts, files):
                 if dt in file:
                     print('Retrieving {}...'.format(file))
+                    retrieved=False
                     archive = BytesIO()
-                    ftp.retrbinary("RETR " + file, archive.write)
+                    # try to retrieve file
+                    while not retrieved:
+                        try:
+                            ftp.retrbinary("RETR " + file, archive.write)
+                            retrieved=True
+                        except:
+                            print('reconnect to ftp')
+                            ftp = FTP(server)
+                            ftp.login()
+                            ftp.cwd('/climate_environment/CDC/grids_germany/hourly/radolan/recent/asc/')
+                            
                     archive.seek(0)
                     archive_daily = tarfile.open(fileobj=archive)
                     #extract file to bytestream
@@ -310,8 +321,18 @@ def rado_io(start_date='20171231',
 
                 if dt[:-2] in file:
                     print('Retrieving {}...'.format(file))
+                    retrieved=False
                     archive = BytesIO()
-                    ftp.retrbinary("RETR " + file, archive.write)
+                    # try to retrieve file
+                    while not retrieved:
+                        try:
+                            ftp.retrbinary("RETR " + file, archive.write)
+                            retrieved=True
+                        except:
+                            print('reconnect to ftp')
+                            ftp = FTP(server)
+                            ftp.login()
+                            ftp.cwd('/climate_environment/CDC/grids_germany/hourly/radolan/historical/asc/{}/'.format(year))
                     archive.seek(0)
                     archive_monthly = tarfile.open(fileobj=archive)
                     #double_zipped so we need to get daily archives
@@ -324,6 +345,7 @@ def rado_io(start_date='20171231',
                             tar_daily.seek(0)
                             archive_daily = tarfile.open(fileobj=tar_daily)
                             #extract file to bytestream
+                            print('extract daily file', members_daily)
                             for member in archive_daily.getmembers():
                                 radolan_io = archive_daily.extractfile(
                                     member.name)
@@ -371,8 +393,12 @@ def rado_io(start_date='20171231',
                                             rado_dates.append(
                                                 radoname_to_date(
                                                     member.name, 'minutes'))
+                    rado_dates=sorted(rado_dates)
                     print('Processing {}...finished'.format(file))
-    ftp.quit()
+    try:
+        ftp.quit()
+    except Exception as e:
+        print(e)
     return rado_stacked_data, rado_dates, radocells
 
 
@@ -596,9 +622,9 @@ def rasterizegeo(shp_inpt='.\example\einzugsgebiet.shp',pixel_sz=(100,100),atrbt
 
 
 #define a main function which calls all other subfunctions
-def radohydro(start_date='20171230',
-              end_date='20180102',
-              shape_inpt='.\Examples\einzugsgebiet.shp',
+def radohydro(start_date='20060101',
+              end_date='20180331',
+              shape_inpt='.\Examples\Mueglitz_Basin.shp',
               outpt_proj='epsg:25833',
               Output=True):
     """
