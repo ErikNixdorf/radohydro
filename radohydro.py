@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.5
+#!/usr/bin/env python3.7
 """This script intersects a given shapefile of one or multiple basins with the Radolan ASCII data by DWD and returns a
    .csv with the rainfall intensity for each basin in the given period as output. Optionally the clipped shape file
    and the geoTIFFs can be requested
@@ -7,12 +7,13 @@
    Major Changes in V04:
        -Performance (factor 3) by having fully streambased solution
        -Script splitted into functions to increase flexibility
+	Minor in V041: Fixed reprojection bugs, allows no shape inpt, improved memory usage
 """
 
 __author__ = "Erik Nixdorf, Marco Hannemann"
 __propertyof__ = "Helmholtz-Zentrum fuer Umweltforschung GmbH - UFZ. "
 __email__ = "erik.nixdorf@ufz.de, marco.hannemann@ufz.de"
-__version__ = "0.4"
+__version__ = "0.41"
 import time
 import os
 from ftplib import FTP
@@ -28,6 +29,9 @@ import geopandas as gp
 from shapely.geometry import box
 from io import BytesIO
 from rasterio.io import MemoryFile
+import rasterio
+import fiona
+import sys
 
 
 # generator to create list of dates
@@ -44,14 +48,15 @@ def daterange(start, end, delta):
 # define radolan projection
 def get_radoproj(earthradius=6370040):
     """
-    Defines the native radoproj
+    Defines the native radoproj as a projection CRS    
     """
     # Native projection ("RADOLAN-Projektion"):
     R = earthradius
     # Erdradius (Kugel)
     R = "+a=" + str(R) + " +b=" + str(R)
     # zu 'R' zusammenfassen -> Kugel
-    nat_proj = "+proj=stere +lon_0=10.0 +lat_0=90.0 +lat_ts=60.0 " + R + " +units=m"
+    nat_proj = rasterio.crs.CRS.from_proj4(
+        "+proj=stere +lon_0=10.0 +lat_0=90.0 +lat_ts=60.0 " + R + " +units=m")
     return nat_proj
 
 
@@ -87,8 +92,7 @@ def buffered_raster_clipping(raster_inpt,
         r_data = raster_inpt
         r_proj = raster_proj
         r_transform = raster_transfrm
-        r_na = na_value
-    # read the shapefile
+        r_na = na_value  #
     if isinstance(shape_inpt, str):
         gdfbnd = gp.read_file(shape_inpt)
     else:
@@ -99,18 +103,14 @@ def buffered_raster_clipping(raster_inpt,
             print('No readable clipping file defined')
             exit()
     #reproject depending on what have entered as information
-    if r_proj.find('epsg')!=-1:
-        try: 
-            epsg_code=int(r_proj[5:])
-            gdfbnd.to_crs(epsg=epsg_code,inplace=True)
-            print('Boundary GIS vectorfile was reprojected to Raster projection')
-        except Exception as e:
-                print('error converting epsg code')
-                print(e)
-    else:
-        #if not we simply use projection str
-        gdfbnd=gdfbnd.to_crs(crs=r_proj)
+    try:
+        # if not we simply use projection str
+        gdfbnd = gdfbnd.to_crs(crs=r_proj)
         print('Boundary GIS vectorfile was reprojected to Raster projection')
+    except Exception as e:
+        print(e)
+        print('projection is not provided as crs object')
+
     #gdfbnd.to_file('test_example.shp')
     # Find the clipping window
     cellsize = abs(min((abs(r_transform[1]), abs(r_transform[5]))))
@@ -175,7 +175,10 @@ def create_footprint_cells(transform=None, data_size=None, proj_crs=None):
                               cellbounds[:, 2], cellbounds[:, 3])
     ]
     footprint_cells = gp.GeoDataFrame(df, geometry=b)
-    footprint_cells.crs = proj_crs
+    try:
+        footprint_cells.crs = proj_crs
+    except:
+        print('Projection is not provided as crs object')
     return footprint_cells
 
 
@@ -251,19 +254,21 @@ def rado_io(start_date='20171231',
             for dt, file in product(dts, files):
                 if dt in file:
                     print('Retrieving {}...'.format(file))
-                    retrieved=False
+                    retrieved = False
                     archive = BytesIO()
                     # try to retrieve file
                     while not retrieved:
                         try:
                             ftp.retrbinary("RETR " + file, archive.write)
-                            retrieved=True
+                            retrieved = True
                         except:
                             print('reconnect to ftp')
                             ftp = FTP(server)
                             ftp.login()
-                            ftp.cwd('/climate_environment/CDC/grids_germany/hourly/radolan/recent/asc/')
-                            
+                            ftp.cwd(
+                                '/climate_environment/CDC/grids_germany/hourly/radolan/recent/asc/'
+                            )
+
                     archive.seek(0)
                     archive_daily = tarfile.open(fileobj=archive)
                     #extract file to bytestream
@@ -271,7 +276,7 @@ def rado_io(start_date='20171231',
                         radolan_io = archive_daily.extractfile(member.name)
                         with MemoryFile(radolan_io) as memfile:
                             with memfile.open() as rado_ds:
-                                rado_data = rado_ds.read()[0]
+                                rado_data = rado_ds.read()[0].astype(np.int16)
                                 #depending whether we get first dataset or not we do
                                 #different calculations
                                 if initDf:
@@ -282,12 +287,18 @@ def rado_io(start_date='20171231',
                                                       afn_transform[5], 0,
                                                       afn_transform[4])
                                     # do the complicated buffer clipping
-                                    rado_clip_data, rado_clip_transform, cols, rows = buffered_raster_clipping(
-                                        rado_data,
-                                        shape_inpt=shapefile,
-                                        raster_transfrm=rado_transform,
-                                        raster_proj=rado_proj)
-
+                                    # if a shapefile exist
+                                    if shapefile is not None:
+                                        rado_clip_data, rado_clip_transform, cols, rows = buffered_raster_clipping(
+                                            rado_data,
+                                            shape_inpt=shapefile,
+                                            raster_transfrm=rado_transform,
+                                            raster_proj=rado_proj)
+                                    else:
+                                        rado_clip_data = rado_data
+                                        rado_clip_transform = rado_transform
+                                        rows = [rado_data.shape[0], 0]
+                                        cols = [0, rado_data.shape[1]]
                                     #generate the footprint cells
                                     radocells = create_footprint_cells(
                                         transform=rado_clip_transform,
@@ -305,8 +316,14 @@ def rado_io(start_date='20171231',
                                 else:
                                     rado_clip_data = rado_data[rows[1]:rows[0],
                                                                cols[0]:cols[1]]
-                                    rado_stacked_data = np.dstack(
-                                        (rado_stacked_data, rado_clip_data))
+                                    try:
+                                        rado_stacked_data = np.dstack(
+                                            (rado_stacked_data,
+                                             rado_clip_data))
+                                    except Exception as e:
+                                        print(e)
+                                        sys.exit(
+                                            'Memory Error :-(, buy more RAM')
                                     rado_dates.append(
                                         radoname_to_date(
                                             member.name, 'minutes'))
@@ -321,18 +338,20 @@ def rado_io(start_date='20171231',
 
                 if dt[:-2] in file:
                     print('Retrieving {}...'.format(file))
-                    retrieved=False
+                    retrieved = False
                     archive = BytesIO()
                     # try to retrieve file
                     while not retrieved:
                         try:
                             ftp.retrbinary("RETR " + file, archive.write)
-                            retrieved=True
+                            retrieved = True
                         except:
                             print('reconnect to ftp')
                             ftp = FTP(server)
                             ftp.login()
-                            ftp.cwd('/climate_environment/CDC/grids_germany/hourly/radolan/historical/asc/{}/'.format(year))
+                            ftp.cwd(
+                                '/climate_environment/CDC/grids_germany/hourly/radolan/historical/asc/{}/'.
+                                format(year))
                     archive.seek(0)
                     archive_monthly = tarfile.open(fileobj=archive)
                     #double_zipped so we need to get daily archives
@@ -351,7 +370,8 @@ def rado_io(start_date='20171231',
                                     member.name)
                                 with MemoryFile(radolan_io) as memfile:
                                     with memfile.open() as rado_ds:
-                                        rado_data = rado_ds.read()[0]
+                                        rado_data = rado_ds.read()[0].astype(
+                                            np.int16)
                                         #depending whether we get first dataset or not we do
                                         #different calculations
                                         if initDf:
@@ -364,11 +384,19 @@ def rado_io(start_date='20171231',
                                                               0,
                                                               afn_transform[4])
                                             # do the complicated buffer clipping
-                                            rado_clip_data, rado_clip_transform, cols, rows = buffered_raster_clipping(
-                                                rado_data,
-                                                shape_inpt=shapefile,
-                                                raster_transfrm=rado_transform,
-                                                raster_proj=rado_proj)
+                                            # if a shapefile exist
+                                            if shapefile is not None:
+                                                rado_clip_data, rado_clip_transform, cols, rows = buffered_raster_clipping(
+                                                    rado_data,
+                                                    shape_inpt=shapefile,
+                                                    raster_transfrm=
+                                                    rado_transform,
+                                                    raster_proj=rado_proj)
+                                            else:
+                                                rado_clip_data = rado_data
+                                                rado_clip_transform = rado_transform
+                                                rows = [rado_data.shape[0], 0]
+                                                cols = [0, rado_data.shape[1]]
 
                                             #generate the footprint cells
                                             radocells = create_footprint_cells(
@@ -383,22 +411,30 @@ def rado_io(start_date='20171231',
                                                     member.name, 'minutes')
                                             ]
                                             initDf = False
-                                        # if we initialised already, computation is easy
+                                            # if we initialised already, computation is easy
                                         else:
                                             rado_clip_data = rado_data[rows[
                                                 1]:rows[0], cols[0]:cols[1]]
-                                            rado_stacked_data = np.dstack(
-                                                (rado_stacked_data,
-                                                 rado_clip_data))
+                                            try:
+                                                rado_stacked_data = np.dstack(
+                                                    (rado_stacked_data,
+                                                     rado_clip_data))
+                                            except Exception as e:
+                                                print(e)
+                                                sys.exit(
+                                                    'Memory Error :-(, buy more RAM'
+                                                )
                                             rado_dates.append(
                                                 radoname_to_date(
                                                     member.name, 'minutes'))
-                    rado_dates=sorted(rado_dates)
+                    rado_dates = sorted(rado_dates)
                     print('Processing {}...finished'.format(file))
     try:
         ftp.quit()
     except Exception as e:
         print(e)
+    # repar the radocell crs
+    radocells.crs = fiona.crs.to_string(radocells.crs)
     return rado_stacked_data, rado_dates, radocells
 
 
@@ -407,7 +443,8 @@ def map_radonum_on_cellgrd(rado_stacked_data,
                            rado_dates,
                            radocells,
                            numerator=10,
-                           Output=True):
+                           Output=False,
+                           outpt_proj='epsg:25833'):
     """
     A tool which maps all retrieved precipitation grids on the poylgoncells
     """
@@ -423,13 +460,16 @@ def map_radonum_on_cellgrd(rado_stacked_data,
         precip_col_nms = precip_cols.append(
             rado_dates[i].strftime("%y%m%d%H%M"))
         radocells[precip_cols[i]] = np.true_divide(
-            rado_stacked_data[:, :, i].reshape(-1, 1)[:, 0], numerator)
+            rado_stacked_data[:, :, i].reshape(-1, 1)[:, 0], numerator).astype(
+                np.int16)
+
     if Output:
         # try to create the directory
         try:
             os.mkdir('Data')
         except OSError:
             pass
+        radocells = radocells.to_crs({'init': outpt_proj})
         radocells.to_file('.\Data\Radoprecipitationgrid.shp')
     return radocells, precip_col_nms
 
@@ -452,9 +492,9 @@ def map_cellgrd_on_polyg(radocells, shape_inpt=None, outpt_proj='epsg:25833'):
             # if no shape is given no clipping will be done:
             print('No readable clipping file defined')
             exit()
-    # reproject
-    gdfbnd = gdfbnd.to_crs(crs=outpt_proj)
-    radocells = radocells.to_crs(crs=outpt_proj)
+    # reproject both to output projection
+    gdfbnd = gdfbnd.to_crs({'init': outpt_proj})
+    radocells = radocells.to_crs({'init': outpt_proj})
     print('polygons reprojected to', outpt_proj)
     #calculate the area of the radocells
     radocells['gridcellarea'] = radocells['geometry'].area
@@ -475,7 +515,8 @@ def compute_polyg_precip(gdfclip,
                          gdfbnd,
                          precip_colmns='AllDigits',
                          Output=True,
-                         outpt_proj='epsg:25833',outpt_nm='radohydro'):
+                         outpt_proj='epsg:25833',
+                         outpt_nm='radohydro'):
     """
     This Function basically sums of all cells which belong to the same basin ID (polygon
     A Weighted average approach is used
@@ -491,8 +532,8 @@ def compute_polyg_precip(gdfclip,
     else:
         precipitationCols = precip_colmns
     #reproject both datasets
-    gdfbnd = gdfbnd.to_crs(crs=outpt_proj)
-    gdfclip = gdfclip.to_crs(crs=outpt_proj)
+    gdfbnd = gdfbnd.to_crs({'init': outpt_proj})
+    gdfclip = gdfclip.to_crs({'init': outpt_proj})
     print('polygons reprojected to', outpt_proj)
     #We compute the cellweights of each clipped cell
     cellweights = (
@@ -545,7 +586,7 @@ def compute_polyg_precip(gdfclip,
         #write out the numpy array
         for basin in precipitationbasin:
             with open(
-                    '.\Data\\'+outpt_nm+'_{!s}.csv'.format(basin[-2]),
+                    '.\Data\\' + outpt_nm + '_{!s}.csv'.format(basin[-2]),
                     'w',
                     newline='') as fout:
                 fout.write('basin ID: {:d}\n'.format(int(basin[-2])))
@@ -579,74 +620,96 @@ def compute_polyg_precip(gdfclip,
     return precipitationbasin
 
 
-def rasterizegeo(shp_inpt='.\example\einzugsgebiet.shp',pixel_sz=(100,100),atrbt_nm='gridcode',Output=True,Output_nm='test.tif'):
+def rasterizegeo(shp_inpt='.\example\einzugsgebiet.shp',
+                 pixel_sz=(100, 100),
+                 atrbt_nm='gridcode',
+                 Output=True,
+                 Output_nm='test.tif'):
     """
     Created on Tue Oct 22 12:15:13 2019
     A small tool which converts shapefiles and a selectable feature to rasterfiles
     Heavily exploits rasterize.features.rasterize functionality
     @author: nixdorf
     """
-    
+
     #%% import external libraries
     import rasterio
-    import affine # transformation issues
+    import affine  # transformation issues
     import geopandas as gpd
     from rasterio import features
 
     #%% start processinghttps://sigon.gitlab.io/post/2019-05-02-rasterize/
     #open geometry to geopandas
-    if isinstance(shp_inpt,str):
-        gdf_inpt=gpd.GeoDataFrame.from_file(shp_inpt)
+    if isinstance(shp_inpt, str):
+        gdf_inpt = gpd.GeoDataFrame.from_file(shp_inpt)
     else:
-        gdf_inpt=shp_inpt.copy()
-    
-    rst_transform=affine.Affine(pixel_sz[0],0,gdf_inpt.total_bounds[0],0,-pixel_sz[1],gdf_inpt.total_bounds[3])
-    rst_shape=(int((gdf_inpt.total_bounds[2]-gdf_inpt.total_bounds[0])/pixel_sz[0]),int((gdf_inpt.total_bounds[3]-gdf_inpt.total_bounds[1])/pixel_sz[1]))
-    rst_data = features.rasterize(shapes = gdf_inpt[['geometry', atrbt_nm]].values.tolist(),out_shape=(rst_shape[1],rst_shape[0]), transform=rst_transform,fill=-9999)
-    
-    
-    
-    if Output:    
+        gdf_inpt = shp_inpt.copy()
+
+    rst_transform = affine.Affine(pixel_sz[0], 0, gdf_inpt.total_bounds[0], 0,
+                                  -pixel_sz[1], gdf_inpt.total_bounds[3])
+    rst_shape = (int(
+        (gdf_inpt.total_bounds[2] - gdf_inpt.total_bounds[0]) / pixel_sz[0]),
+                 int((gdf_inpt.total_bounds[3] - gdf_inpt.total_bounds[1]) /
+                     pixel_sz[1]))
+    rst_data = features.rasterize(
+        shapes=gdf_inpt[['geometry', atrbt_nm]].values.tolist(),
+        out_shape=(rst_shape[1], rst_shape[0]),
+        transform=rst_transform,
+        fill=-9999)
+
+    if Output:
         with rasterio.open(
-            Output_nm, 'w',
-            driver='GTiff',
-            transform = rst_transform,
-            dtype=rasterio.float64,
-            crs=gdf_inpt.crs['init'],
-            count=1,
-            nodata=-9999,
-            width=rst_shape[0],
-            height=rst_shape[1]) as dst:
-                dst.write(rst_data.astype(float), indexes=1)
-                
+                Output_nm,
+                'w',
+                driver='GTiff',
+                transform=rst_transform,
+                dtype=rasterio.float64,
+                crs=gdf_inpt.crs['init'],
+                count=1,
+                nodata=-9999,
+                width=rst_shape[0],
+                height=rst_shape[1]) as dst:
+            dst.write(rst_data.astype(float), indexes=1)
 
 
 #define a main function which calls all other subfunctions
-def radohydro(start_date='20060101',
-              end_date='20180331',
+def radohydro(start_date='20171231',
+              end_date='20180101',
               shape_inpt='.\Examples\Mueglitz_Basin.shp',
+              shape_integration=True,
               outpt_proj='epsg:25833',
-              Output=True):
+              Output=True,
+              outpt_nm='radoprec' + '20180101' + '_' + '20180331'):
     """
     Couples the four main function for the entire workflow
+    #'.\Examples\Mueglitz_Basin.shp'
     """
-
+    # retrieve data
     rado_stacked_data, rado_dates, radocellgrid = rado_io(
         start_date=start_date, end_date=end_date, shapefile=shape_inpt)
+    #map data on vectorgrid
     radocell_precip, precip_col_nms = map_radonum_on_cellgrd(
         rado_stacked_data,
         rado_dates,
         radocellgrid,
         numerator=10,
-        Output=False)
-    radocell_clip, gdf_shape = map_cellgrd_on_polyg(
-        radocell_precip, shape_inpt=shape_inpt, outpt_proj=outpt_proj)
-    compute_polyg_precip(
-        radocell_clip,
-        gdf_shape,
-        precip_colmns='AllDigits',
-        Output=Output,
+        Output=True,
         outpt_proj=outpt_proj)
+    # delete stacked numpy array
+    del rado_stacked_data
+    # Integrate values to boundary shape, if needed
+    if shape_integration:
+        radocell_clip, gdf_shape = map_cellgrd_on_polyg(
+            radocell_precip, shape_inpt=shape_inpt, outpt_proj=outpt_proj)
+        compute_polyg_precip(
+            radocell_clip,
+            gdf_shape,
+            precip_colmns='AllDigits',
+            Output=Output,
+            outpt_proj=outpt_proj,
+            outpt_nm=outpt_nm)
+    else:
+        print('No integration of data on geometry requested')
     return None
 
 
