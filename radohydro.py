@@ -202,7 +202,7 @@ def radoname_to_date(filename, date_type):
 # The Actual downloader for Radolan to archive
 def rado_io(start_date='20171231',
             end_date='20180101',
-            shapefile='.\Examples\einzugsgebiet.shp'):
+            shapefile='.\Examples\einzugsgebiet.shp', number_frmt=np.int16):
     """
     The Actual downloader for Radolan to stream and clipping
     """
@@ -276,7 +276,7 @@ def rado_io(start_date='20171231',
                         radolan_io = archive_daily.extractfile(member.name)
                         with MemoryFile(radolan_io) as memfile:
                             with memfile.open() as rado_ds:
-                                rado_data = rado_ds.read()[0].astype(np.int16)
+                                rado_data = rado_ds.read()[0].astype(number_frmt)
                                 #depending whether we get first dataset or not we do
                                 #different calculations
                                 if initDf:
@@ -371,7 +371,7 @@ def rado_io(start_date='20171231',
                                 with MemoryFile(radolan_io) as memfile:
                                     with memfile.open() as rado_ds:
                                         rado_data = rado_ds.read()[0].astype(
-                                            np.int16)
+                                            number_frmt)
                                         #depending whether we get first dataset or not we do
                                         #different calculations
                                         if initDf:
@@ -444,7 +444,7 @@ def map_radonum_on_cellgrd(rado_stacked_data,
                            radocells,
                            numerator=10,
                            Output=False,
-                           outpt_proj='epsg:25833'):
+                           outpt_proj='epsg:25833',number_frmt=np.float32):
     """
     A tool which maps all retrieved precipitation grids on the poylgoncells
     """
@@ -461,7 +461,7 @@ def map_radonum_on_cellgrd(rado_stacked_data,
             rado_dates[i].strftime("%y%m%d%H%M"))
         radocells[precip_cols[i]] = np.true_divide(
             rado_stacked_data[:, :, i].reshape(-1, 1)[:, 0], numerator).astype(
-                np.int16)
+                number_frmt)
 
     if Output:
         # try to create the directory
@@ -679,14 +679,14 @@ def radohydro(start_date='20171231',
               shape_integration=True,
               outpt_proj='epsg:25833',
               Output=True,
-              outpt_nm='radoprec' + '20180101' + '_' + '20180331'):
+              outpt_nm='radoprec' + '20180101' + '_' + '20180331',number_frmt=np.int16):
     """
     Couples the four main function for the entire workflow
     #'.\Examples\Mueglitz_Basin.shp'
     """
     # retrieve data
     rado_stacked_data, rado_dates, radocellgrid = rado_io(
-        start_date=start_date, end_date=end_date, shapefile=shape_inpt)
+        start_date=start_date, end_date=end_date, shapefile=shape_inpt,number_frmt=number_frmt)
     #map data on vectorgrid
     radocell_precip, precip_col_nms = map_radonum_on_cellgrd(
         rado_stacked_data,
@@ -694,7 +694,7 @@ def radohydro(start_date='20171231',
         radocellgrid,
         numerator=10,
         Output=True,
-        outpt_proj=outpt_proj)
+        outpt_proj=outpt_proj,number_frmt=number_frmt)
     # delete stacked numpy array
     del rado_stacked_data
     # Integrate values to boundary shape, if needed
