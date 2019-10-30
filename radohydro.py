@@ -439,9 +439,9 @@ def rado_io(start_date='20171231',
 
 
 # Quit
-def map_radonum_on_cellgrd(rado_stacked_data,
-                           rado_dates,
-                           radocells,
+def map_arraystack_on_cellgrd(array_stack,
+                           stack_dates,
+                           cellgrd,
                            numerator=10,
                            Output=False,
                            outpt_proj='epsg:25833',number_frmt=np.float32):
@@ -450,17 +450,17 @@ def map_radonum_on_cellgrd(rado_stacked_data,
     """
     #sort cells
     try:
-        radocells = radocells.sort_values(['Index_row', 'Index_column'])
+        cellgrd = cellgrd.sort_values(['Index_row', 'Index_column'])
     except Exception:
         print('No index row/column exist, generate a better radocellpolygrid')
         return None
-    precip_cols = list()
+    data_cols = list()
     #add new columns for the precipitation
-    for i in range(0, len(rado_dates)):
-        precip_col_nms = precip_cols.append(
-            rado_dates[i].strftime("%y%m%d%H%M"))
-        radocells[precip_cols[i]] = np.true_divide(
-            rado_stacked_data[:, :, i].reshape(-1, 1)[:, 0], numerator).astype(
+    for i in range(0, len(stack_dates)):
+        data_col_nms = data_cols.append(
+            stack_dates[i].strftime("%y%m%d%H%M"))
+        cellgrd[data_cols[i]] = np.true_divide(
+            array_stack[:, :, i].reshape(-1, 1)[:, 0], numerator).astype(
                 number_frmt)
 
     if Output:
@@ -469,13 +469,13 @@ def map_radonum_on_cellgrd(rado_stacked_data,
             os.mkdir('Data')
         except OSError:
             pass
-        radocells = radocells.to_crs({'init': outpt_proj})
-        radocells.to_file('.\Data\Radoprecipitationgrid.shp')
-    return radocells, precip_col_nms
+        cellgrd = cellgrd.to_crs({'init': outpt_proj})
+        cellgrd.to_file('.\Data\datacellgrid.shp')
+    return cellgrd, data_col_nms
 
 
 #
-def map_cellgrd_on_polyg(radocells, shape_inpt=None, outpt_proj='epsg:25833'):
+def map_cellgrd_on_polyg(cellgrd, shape_inpt=None, outpt_proj='epsg:25833'):
     """
     Maps the radocellgrid on a shapefile (e.g.basin)
     radocells should be a geodataframe and shapefile can be either a 
@@ -494,15 +494,15 @@ def map_cellgrd_on_polyg(radocells, shape_inpt=None, outpt_proj='epsg:25833'):
             exit()
     # reproject both to output projection
     gdfbnd = gdfbnd.to_crs({'init': outpt_proj})
-    radocells = radocells.to_crs({'init': outpt_proj})
+    cellgrd = cellgrd.to_crs({'init': outpt_proj})
     print('polygons reprojected to', outpt_proj)
     #calculate the area of the radocells
-    radocells['gridcellarea'] = radocells['geometry'].area
+    cellgrd['gridcellarea'] = cellgrd['geometry'].area
     # replace gridcodes with new ID, IDs are in order of polygons
     gdfbnd['basinID'] = range(1, gdfbnd.shape[0] + 1)
     # clip radolan data with input shapefile -->most time consuming timestep
     gdfclip = gp.overlay(
-        radocells,
+        cellgrd,
         gdfbnd,
         how='intersection',
         make_valid=True,
@@ -511,9 +511,9 @@ def map_cellgrd_on_polyg(radocells, shape_inpt=None, outpt_proj='epsg:25833'):
     return gdfclip, gdfbnd
 
 
-def compute_polyg_precip(gdfclip,
-                         gdfbnd,
-                         precip_colmns='AllDigits',
+def compute_polyg_values(gdfclip,
+                         gdfbnd,header='rainfall[mm/h]',
+                         datacol_type='AllDigits',
                          Output=True,
                          outpt_proj='epsg:25833',
                          outpt_nm='radohydro'):
@@ -525,12 +525,12 @@ def compute_polyg_precip(gdfclip,
     reading all columns which have only digits in column name (mode='AllDigits')
     """
     # first we identify the header of the precip_clms
-    if precip_colmns == 'AllDigits':
-        precipitationCols = [
+    if datacol_type == 'AllDigits':
+        datacols = [
             column for column in gdfclip.columns if column.isdigit()
         ]
     else:
-        precipitationCols = precip_colmns
+        datacols = datacol_type
     #reproject both datasets
     gdfbnd = gdfbnd.to_crs({'init': outpt_proj})
     gdfclip = gdfclip.to_crs({'init': outpt_proj})
@@ -541,40 +541,36 @@ def compute_polyg_precip(gdfclip,
     #get basin ID vector and also the unique values preserving the row
     basinIDs = gdfclip['basinID'].to_numpy()
     basinIDsunique = pd.unique(gdfclip['basinID'])
-    #Get numpy array from the dataframe for all precipitation data as well as for the Basin ID and weights, both together does not work :-(
-    precipitationcellsextracted = gdfclip.loc[:, precipitationCols[
-        0]:precipitationCols[-1]].to_numpy() * gdfclip['gridcellarea'][0]
+    #Get numpy array from the dataframe for all data as well as for the Basin ID and weights, both together does not work :-(
+    datacellsextracted = gdfclip.loc[:, datacols[
+        0]:datacols[-1]].to_numpy() * gdfclip['gridcellarea'][0]
     #Multiply by cellweights and add basinID
-    precipitationcellweighted = precipitationcellsextracted * cellweights[:,
-                                                                          None]  #http://scipy-lectures.org/advanced/advanced_numpy/#broadcasting
+    datacellweighted = datacellsextracted * cellweights[:, None]  #http://scipy-lectures.org/advanced/advanced_numpy/#broadcasting
     #add the weights
-    precipitationcellweighted = np.hstack((precipitationcellweighted,
+    datacellweighted = np.hstack((datacellweighted,
                                            cellweights.reshape(-1, 1)))
     #add basinIDs as a new column
-    precipitationcellweighted = np.hstack((precipitationcellweighted,
+    datacellweighted = np.hstack((datacellweighted,
                                            basinIDs.reshape(-1, 1)))
-    #Finally we sum each row to get value for each basin and each time step https://docs.scipy.org/doc/numpy/reference/generated/numpy.ufunc.reduceat.html
-    precipitationbasin = np.add.reduceat(
-        precipitationcellweighted,
-        np.r_[0, np.where(np.diff(precipitationcellweighted[:, -1]))[0] + 1],
+    #Finally we sum each row to get value for each polygon and each time step https://docs.scipy.org/doc/numpy/reference/generated/numpy.ufunc.reduceat.html
+    polyg_values = np.add.reduceat(
+        datacellweighted,
+        np.r_[0, np.where(np.diff(datacellweighted[:, -1]))[0] + 1],
         axis=0)
     #Compute the average weight
-    precipitationbasin[:,
-                       -2] = precipitationbasin[:,
-                                                -2] * basinIDsunique / precipitationbasin[:,
-                                                                                          -1]
+    polyg_values[:, -2] = polyg_values[:, -2] * basinIDsunique / polyg_values[:,-1]
     #replace sum of unique basin id by actual basin id
-    precipitationbasin[:, -1] = basinIDsunique
+    polyg_values[:, -1] = basinIDsunique
     #retrieve output_area
     polygonarea = np.vstack((gdfbnd['basinID'].to_numpy(),
                              gdfbnd.area.to_numpy())).T
-    precipitationbasin = np.hstack(
-        (precipitationbasin,
+    polyg_values = np.hstack(
+        (polyg_values,
          polygonarea[(basinIDsunique.flatten() - 1)][:, 1].reshape(-1, 1)))
-    #compute to mm/h
-    precipitationbasin[:, :len(precipitationCols)] = (
-        precipitationbasin[:, :len(precipitationCols)].T /
-        precipitationbasin[:, -1]).T
+    #compute to intense parameter again by divding by area
+    polyg_values[:, :len(datacols)] = (
+        polyg_values[:, :len(datacols)].T /
+        polyg_values[:, -1]).T
     # output if desired
     if Output == True:
         # try to create the directory
@@ -584,40 +580,40 @@ def compute_polyg_precip(gdfclip,
             pass
 
         #write out the numpy array
-        for basin in precipitationbasin:
+        for polyg_value in polyg_values:
             with open(
-                    '.\Data\\' + outpt_nm + '_{!s}.csv'.format(basin[-2]),
+                    '.\Data\\' + outpt_nm + '_{!s}.csv'.format(polyg_value[-2]),
                     'w',
                     newline='') as fout:
-                fout.write('basin ID: {:d}\n'.format(int(basin[-2])))
-                fout.write('average_cellweight: {0:.3f}\n'.format(basin[-3]))
-                fout.write('basin_area: {0:.3f}\n'.format(basin[-1]))
-                fout.write('Time[yymmddhh],rainfall[mm/h]\n')
+                fout.write('basin ID: {:d}\n'.format(int(polyg_value[-2])))
+                fout.write('average_cellweight: {0:.3f}\n'.format(polyg_value[-3]))
+                fout.write('basin_area: {0:.3f}\n'.format(polyg_value[-1]))
+                fout.write('Time[yymmddhh],'+header)
                 np.savetxt(
                     fout,
-                    np.column_stack((precipitationCols,
+                    np.column_stack((datacols,
                                      np.around(
-                                         basin[:len(precipitationCols)],
+                                         polyg_value[:len(datacols)],
                                          decimals=3))),
                     delimiter=",",
                     fmt="%s")
 
-        if len(precipitationCols) < 500:
+        if len(datacols) < 500:
             #Write out the updated Polygonshape
             #add new information to old dataframe and write it out as shp
-            precipitationbasinsorted = precipitationbasin[
-                precipitationbasin[:, -2].argsort()]
-            for i in range(0, len(precipitationCols)):
-                gdfbnd[precipitationCols[i]] = precipitationbasinsorted[:, i]
-            gdfbnd['BasinIDNew'] = precipitationbasinsorted[:, -2]
-            gdfbnd['average_cellweight'] = precipitationbasinsorted[:, -3]
-            gdfbnd['basin_area'] = precipitationbasinsorted[:, -1]
+            polyg_valuessorted = polyg_values[
+                polyg_values[:, -2].argsort()]
+            for i in range(0, len(datacols)):
+                gdfbnd[datacols[i]] = polyg_valuessorted[:, i]
+            gdfbnd['BasinIDNew'] = polyg_valuessorted[:, -2]
+            gdfbnd['average_cellweight'] = polyg_valuessorted[:, -3]
+            gdfbnd['basin_area'] = polyg_valuessorted[:, -1]
             gdfbnd.to_file(
-                os.path.join(os.getcwd(), 'Data', 'precip_polygon.shp'))
+                os.path.join(os.getcwd(), 'Data', 'polygon_values_'+header+'.shp'))
 
         print('\nOutput saved to /Data')
 
-    return precipitationbasin
+    return polyg_values
 
 
 def rasterizegeo(shp_inpt='.\example\einzugsgebiet.shp',
@@ -688,7 +684,7 @@ def radohydro(start_date='20171231',
     rado_stacked_data, rado_dates, radocellgrid = rado_io(
         start_date=start_date, end_date=end_date, shapefile=shape_inpt,number_frmt=number_frmt)
     #map data on vectorgrid
-    radocell_precip, precip_col_nms = map_radonum_on_cellgrd(
+    radocell_precip, precip_col_nms = map_arraystack_on_cellgrd(
         rado_stacked_data,
         rado_dates,
         radocellgrid,
@@ -701,10 +697,11 @@ def radohydro(start_date='20171231',
     if shape_integration:
         radocell_clip, gdf_shape = map_cellgrd_on_polyg(
             radocell_precip, shape_inpt=shape_inpt, outpt_proj=outpt_proj)
-        compute_polyg_precip(
+        
+        compute_polyg_values(
             radocell_clip,
-            gdf_shape,
-            precip_colmns='AllDigits',
+            gdf_shape,header='rainfall',
+            datacol_type='AllDigits',
             Output=Output,
             outpt_proj=outpt_proj,
             outpt_nm=outpt_nm)
