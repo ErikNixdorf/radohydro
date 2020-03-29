@@ -111,9 +111,9 @@ def create_footprint_cells(transform=None, data_size=None, proj_crs=None):
 
     # ULCorner=src.transform * (0, 0)
     CellBoundsLR = np.linspace(ulx, ulx + (data_size[1] * xres),
-                               data_size[1] + 1)
+                               data_size[1] + 1)/1000
     CellBoundsUB = np.linspace(uly, uly + (data_size[0] * yres),
-                               data_size[0] + 1)
+                               data_size[0] + 1)/1000
 
     # create boundaries of each cell
     cellbounds = np.zeros((data_size[1] * data_size[0], 6))
@@ -127,7 +127,6 @@ def create_footprint_cells(transform=None, data_size=None, proj_crs=None):
                 range(0,
                       len(CellBoundsLR) - 1), range(0,
                                                     len(CellBoundsUB) - 1))))
-
     # Create a pandas dataframe
     df = pd.DataFrame({
         'left': cellbounds[:, 0],
@@ -178,8 +177,7 @@ def map_arraystack_on_cellgrd(array_stack,
         try:
             os.mkdir('Data')
         except OSError:
-            pass
-        cellgrd = cellgrd.to_crs({'init': outpt_proj})
+            pass        
         cellgrd.to_file('.\Data\datacellgrid.shp')
     return cellgrd, data_col_nms
 
@@ -203,8 +201,8 @@ def map_cellgrd_on_polyg(cellgrd, shape_inpt=None, outpt_proj='epsg:25833'):
             print('No readable clipping file defined')
             exit()
     # reproject both to output projection
-    gdfbnd = gdfbnd.to_crs({'init': outpt_proj})
-    cellgrd = cellgrd.to_crs({'init': outpt_proj})
+    gdfbnd = gdfbnd.to_crs(outpt_proj)
+    cellgrd = cellgrd.to_crs(outpt_proj)
     print('polygons reprojected to', outpt_proj)
     #calculate the area of the radocells
     cellgrd['gridcellarea'] = cellgrd['geometry'].area
@@ -215,8 +213,7 @@ def map_cellgrd_on_polyg(cellgrd, shape_inpt=None, outpt_proj='epsg:25833'):
         cellgrd,
         gdfbnd,
         how='intersection',
-        make_valid=True,
-        use_sindex=None)
+        make_valid=True)
 
     return gdfclip, gdfbnd
 
@@ -242,8 +239,8 @@ def compute_polyg_values(gdfclip,
     else:
         datacols = datacol_type
     #reproject both datasets
-    gdfbnd = gdfbnd.to_crs({'init': outpt_proj})
-    gdfclip = gdfclip.to_crs({'init': outpt_proj})
+    gdfbnd = gdfbnd.to_crs(outpt_proj)
+    gdfclip = gdfclip.to_crs(outpt_proj)
     print('polygons reprojected to', outpt_proj)
     #We compute the cellweights of each clipped cell
     cellweights = (
