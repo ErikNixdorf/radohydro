@@ -20,6 +20,7 @@ import tarfile
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from itertools import product
+from pyproj import CRS
 import re
 import numpy as np
 from io import BytesIO
@@ -121,7 +122,7 @@ def rado_io(start_date='20171231',
 
     for year in years:
         #check whether data is recent
-        if (year == datetime.now().year or year == (datetime.now().year - 1)):
+        if year == datetime.now().year:
             ftp.cwd(
                 '/climate_environment/CDC/grids_germany/hourly/radolan/recent/asc/'
             )
@@ -309,17 +310,19 @@ def rado_io(start_date='20171231',
     except Exception as e:
         print(e)
     # repar the radocell crs
-    radocells.crs = fiona.crs.to_string(radocells.crs)
+    #define the radolan_projection
+    rado_proj_string='+proj=stere +lat_0=90 +lat_ts=90 +lon_0=10 +k=0.93301270189 + x_0=0 +y_0=0 +a=6370040 +b=6370040 +to_meter=1000 +no_defs'
+    radocells.crs = CRS(rado_proj_string)
     return rado_stacked_data, rado_dates, radocells
 
 #define a main function which calls all other subfunctions
-def radohydro(start_date='20171231',
-              end_date='20180101',
-              shape_inpt='.\Examples\Mueglitz_Basin.shp',
+def radohydro(start_date='20190201',
+              end_date='20200301',
+              shape_inpt='.\\Examples\\westbach.shp',
               shape_integration=True,
               outpt_proj='epsg:25833',
-              Output=True,
-              outpt_nm='radoprec' + '20180101' + '_' + '20180331',number_frmt=np.int16):
+              Output=False,
+              outpt_nm='westbach' + '20190201' + '_' + '20200301',number_frmt=np.int16):
     """
     Couples the four main function for the entire workflow
     #'.\Examples\Mueglitz_Basin.shp'
@@ -333,7 +336,7 @@ def radohydro(start_date='20171231',
         rado_dates,
         radocellgrid,
         numerator=10,
-        Output=True,
+        Output=Output,
         outpt_proj=outpt_proj,number_frmt=number_frmt)
     # delete stacked numpy array
     del rado_stacked_data
@@ -346,7 +349,7 @@ def radohydro(start_date='20171231',
             radocell_clip,
             gdf_shape,header='rainfall',
             datacol_type='AllDigits',
-            Output=Output,
+            Output=True,
             outpt_proj=outpt_proj,
             outpt_nm=outpt_nm)
     else:
