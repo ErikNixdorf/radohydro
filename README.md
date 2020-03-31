@@ -8,6 +8,7 @@ Radohydro is a small python tool which processes time series precipitation recor
 * Automatic reprojection to destination EPSG given by user
 * Equal-area approach to compute precipitation rates per basin per time
 * Output 1) as csv files containing time series for each basin and <br/>2) as polygon shapefile having the precipitation rates as attribute tables
+* Download from DWD regnie datasets supported 
 
 ## Dependencies
 
