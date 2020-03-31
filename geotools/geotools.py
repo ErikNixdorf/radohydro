@@ -38,6 +38,7 @@ def buffered_raster_clipping(raster_inpt,
     raster_inpt could be either a georeferenced raster or a numpy array 
     (requires raster_transfrm and raster_crs)
     shape_inpt (currently either string or geodataframe)
+    
     Output:
         r_clip_data: clipped_numpy array
         r_clip_transform: New transform in gdal transform style
@@ -101,19 +102,21 @@ def buffered_raster_clipping(raster_inpt,
 
 
 # A tool to create footprint cells (polygons of each radolan dataset
-def create_footprint_cells(transform=None, data_size=None, proj_crs=None):
+def create_footprint_cells(transform=None, data_size=None, proj_crs=None,rado_divisor=1000):
     """
     This tool creates footprint cells(rectangles) from given rastermetadata
     Output is a geodataframe
     data_size= No of rows/columns,e.g using the shape function
+    ado_divisor is a multiplier for coordinates as for unknown reasons, 
+    coordinates have to divided by 1000 prior to transformation
     """
     ulx, xres, xskew, uly, yskew, yres = transform
 
     # ULCorner=src.transform * (0, 0)
     CellBoundsLR = np.linspace(ulx, ulx + (data_size[1] * xres),
-                               data_size[1] + 1)/1000
+                               data_size[1] + 1)/rado_divisor
     CellBoundsUB = np.linspace(uly, uly + (data_size[0] * yres),
-                               data_size[0] + 1)/1000
+                               data_size[0] + 1)/rado_divisor
 
     # create boundaries of each cell
     cellbounds = np.zeros((data_size[1] * data_size[0], 6))
@@ -231,13 +234,15 @@ def compute_polyg_values(gdfclip,
     precip_colmns can be either defined by giving a list of column names or by
     reading all columns which have only digits in column name (mode='AllDigits')
     """
-    # first we identify the header of the precip_clms
+    #first drop na values in data
+    gdfclip=gdfclip.dropna()
+    # second we identify the header of the precip_clms
     if datacol_type == 'AllDigits':
         datacols = [
             column for column in gdfclip.columns if column.isdigit()
         ]
     else:
-        datacols = datacol_type
+        datacols = datacol_type    
     #reproject both datasets
     gdfbnd = gdfbnd.to_crs(outpt_proj)
     gdfclip = gdfclip.to_crs(outpt_proj)
@@ -295,7 +300,7 @@ def compute_polyg_values(gdfclip,
                 fout.write('basin ID: {:d}\n'.format(int(polyg_value[-2])))
                 fout.write('average_cellweight: {0:.3f}\n'.format(polyg_value[-3]))
                 fout.write('basin_area: {0:.3f}\n'.format(polyg_value[-1]))
-                fout.write('Time[yymmddhh],'+header)
+                fout.write('Time[yymmddhh],'+header+'\n')
                 np.savetxt(
                     fout,
                     np.column_stack((datacols,
