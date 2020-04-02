@@ -173,16 +173,16 @@ def rado_io(start_date='20171231',
 
     # Set Initial run to true
     initDf = True
-    # avoid downloading 2018 multiple times
-    if (datetime.now().year in years) and (datetime.now().year - 1 in years):
-        years = years[:-1]
-
     for year in years:
         #check whether data is recent
         if year == datetime.now().year:
-            ftp.cwd(
-                '/climate_environment/CDC/grids_germany/hourly/radolan/recent/asc/'
-            )
+            try:
+                ftp.cwd('/climate_environment/CDC/grids_germany/hourly/radolan/recent/asc/')
+            except:
+                print('reconnect to ftp')
+                server='opendata.dwd.de'
+                ftp=connect_ftp(server = server,connected = False) 
+                ftp.cwd('/climate_environment/CDC/grids_germany/hourly/radolan/recent/asc/')
             files = ftp.nlst()
             for dt, file in product(dts, files):
                 if dt in file:
@@ -263,9 +263,13 @@ def rado_io(start_date='20171231',
                     print('Processing {}...finished'.format(file))
         # the historical case
         else:
-            ftp.cwd(
-                '/climate_environment/CDC/grids_germany/hourly/radolan/historical/asc/{}/'.
-                format(year))
+            try:
+                ftp.cwd('/climate_environment/CDC/grids_germany/hourly/radolan/historical/asc/'+str(year)+'/')
+            except:
+                print('reconnect to ftp')
+                server='opendata.dwd.de'
+                ftp=connect_ftp(server = server,connected = False) 
+                ftp.cwd('/climate_environment/CDC/grids_germany/hourly/radolan/historical/asc/'+str(year)+'/')
             files = ftp.nlst()
             for dt, file in product(dts_historical, files):
 
@@ -282,9 +286,7 @@ def rado_io(start_date='20171231',
                             print('reconnect to ftp')
                             ftp = FTP(server)
                             ftp.login()
-                            ftp.cwd(
-                                '/climate_environment/CDC/grids_germany/hourly/radolan/historical/asc/{}/'.
-                                format(year))
+                            ftp.cwd('/climate_environment/CDC/grids_germany/hourly/radolan/historical/asc/'+str(year)+'/')
                     archive.seek(0)
                     archive_monthly = tarfile.open(fileobj=archive)
                     #double_zipped so we need to get daily archives
@@ -497,13 +499,13 @@ def regnie_io(start_date='20171231',
     
     
 #define a main function which calls all other subfunctions
-def radohydro(start_date='20190201',
+def radohydro(start_date='20180101',
               end_date='20200301',
-              shape_inpt='.\\Examples\\Mueglitz_Basin.shp',datasource='regnie',
+              shape_inpt='.\\Examples\\einzugsgebiet.shp',datasource='radolan',
               shape_integration=True,
               outpt_proj='epsg:25833',
               Output=True,
-              outpt_nm='precip_Mueglitz',number_frmt=np.int16):
+              outpt_nm='precip_rado',number_frmt=np.int16):
     """
     Couples the four main function for the entire workflow
     #'.\Examples\Mueglitz_Basin.shp'
@@ -522,7 +524,7 @@ def radohydro(start_date='20190201',
         rado_dates,
         radocellgrid,
         numerator=10,
-        Output=Output,
+        Output=False,
         outpt_proj=outpt_proj,number_frmt=number_frmt)
     # delete stacked numpy array
     del rado_stacked_data
