@@ -10,14 +10,6 @@ Radohydro is a small python tool which processes time series precipitation recor
 * Output 1) as csv files containing time series for each basin and <br/>2) as polygon shapefile having the precipitation rates as attribute tables
 * Download from DWD regnie datasets supported 
 
-## Dependencies
-
-* Python 3
-* numpy
-* geopandas
-* shapely
-* rasterio
-* gdal
 
 ## Limitations
 
@@ -25,14 +17,16 @@ Radohydro is a small python tool which processes time series precipitation recor
 * for more than 500 precipation records(~21days), output as shp is not supported (dbase problem)
 * large amounts of polygons per shapefile (>10000) may lead to considerable performance decrease
 
+
+## Quickstart
 ```python
-# Quickstart
 import radohydro
 radohydro.radohydro(start_date='20171230',
               end_date='20180102',
               shape_inpt='.\Examples\einzugsgebiet.shp',
+              datasource='radolan',
               outpt_proj='epsg:25833',
-              Output=True):
+              Output=True)
 ```
 
 ## Authors
