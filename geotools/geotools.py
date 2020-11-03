@@ -226,7 +226,8 @@ def compute_polyg_values(gdfclip,
                          datacol_type='AllDigits',
                          Output=True,
                          outpt_proj='epsg:25833',
-                         outpt_nm='radohydro'):
+                         outpt_nm='radohydro',
+                         remove_nan=False):
     """
     This Function basically sums of all cells which belong to the same basin ID (polygon
     A Weighted average approach is used
@@ -234,8 +235,9 @@ def compute_polyg_values(gdfclip,
     precip_colmns can be either defined by giving a list of column names or by
     reading all columns which have only digits in column name (mode='AllDigits')
     """
-    #first drop na values in data
-    gdfclip=gdfclip.dropna()
+  #first drop na values in data if desired
+    if remove_nan:
+        gdfclip=gdfclip.dropna()    
     # second we identify the header of the precip_clms
     if datacol_type == 'AllDigits':
         datacols = [
@@ -247,6 +249,9 @@ def compute_polyg_values(gdfclip,
     gdfbnd = gdfbnd.to_crs(outpt_proj)
     gdfclip = gdfclip.to_crs(outpt_proj)
     print('polygons reprojected to', outpt_proj)
+    
+  
+    
     #We compute the cellweights of each clipped cell
     cellweights = (
         gdfclip['geometry'].area / gdfclip['gridcellarea']).to_numpy()
