@@ -250,17 +250,23 @@ def compute_polyg_values(gdfclip,
     gdfclip = gdfclip.to_crs(outpt_proj)
     print('polygons reprojected to', outpt_proj)
     
-  
+    # for same basin ID, if at least one non-na exist remove the nan values
+    gdf_nan_cleaned=gpd.GeoDataFrame(crs=gdfclip.crs)
+    cellweights=np.array(())
+    for i,df in gdfclip.groupby('basinID'):
+        #if there is one row with no nan entries remove the other rows
+        if sum(df.isna().sum(axis=1)>1)<len(df):
+            df=df.dropna()
+        gdf_nan_cleaned=gdf_nan_cleaned.append(df)
+        #add cellweights information which has to be the sum of one for each basin id
+        cellweights=np.append(cellweights,(df['geometry'].area / df['gridcellarea']/sum(df['geometry'].area / df['gridcellarea'])).to_numpy())
     
-    #We compute the cellweights of each clipped cell
-    cellweights = (
-        gdfclip['geometry'].area / gdfclip['gridcellarea']).to_numpy()
     #get basin ID vector and also the unique values preserving the row
-    basinIDs = gdfclip['basinID'].to_numpy()
-    basinIDsunique = pd.unique(gdfclip['basinID'])
+    basinIDs = gdf_nan_cleaned['basinID'].to_numpy()
+    basinIDsunique = pd.unique(gdf_nan_cleaned['basinID'])
     #Get numpy array from the dataframe for all data as well as for the Basin ID and weights, both together does not work :-(
-    datacellsextracted = gdfclip.loc[:, datacols[
-        0]:datacols[-1]].to_numpy() * gdfclip['gridcellarea'][0]
+    datacellsextracted = gdf_nan_cleaned.loc[:, datacols[
+        0]:datacols[-1]].to_numpy() * gdf_nan_cleaned['gridcellarea'][0]
     #Multiply by cellweights and add basinID
     datacellweighted = datacellsextracted * cellweights[:, None]  #http://scipy-lectures.org/advanced/advanced_numpy/#broadcasting
     #add the weights
