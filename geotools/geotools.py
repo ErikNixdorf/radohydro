@@ -303,9 +303,12 @@ def compute_polyg_values(gdfclip,
             pass
 
         #write out the numpy array
+        leading_zeros=int(np.ceil(np.log(len(polyg_values))))
         for polyg_value in polyg_values:
+            # add a cell string with leading zeros
+            cell_id_str=str(int(polyg_value[-2])).zfill(leading_zeros)
             with open(
-                    '.\Data\\' + outpt_nm + '_{!s}.csv'.format(polyg_value[-2]),
+                    '.\Data\\' + outpt_nm +'_'+ cell_id_str +'.csv',
                     'w',
                     newline='') as fout:
                 fout.write('basin ID: {:d}\n'.format(int(polyg_value[-2])))
