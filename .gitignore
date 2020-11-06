@@ -1,5 +1,6 @@
 #output
 /Data/
+/Examples/
 __pycache__
 #runscript
 runradohydro.py

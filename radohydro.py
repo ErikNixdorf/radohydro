@@ -9,12 +9,13 @@
        -Script splitted into functions to increase flexibility
 	Minor in V041: Fixed reprojection bugs, allows no shape inpt, improved memory usage
    Major Changes in V05:allows download from regnie data as well
+   V06: Fit interpolation at edges
 """
 
 __author__ = "Erik Nixdorf, Marco Hannemann"
 __propertyof__ = "Helmholtz-Zentrum fuer Umweltforschung GmbH - UFZ. "
 __email__ = "erik.nixdorf@ufz.de, marco.hannemann@ufz.de"
-__version__ = "0.5"
+__version__ = "0.6"
 import time
 from ftplib import FTP
 import tarfile

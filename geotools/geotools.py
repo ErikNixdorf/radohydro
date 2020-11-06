@@ -264,26 +264,22 @@ def compute_polyg_values(gdfclip,
     #get basin ID vector and also the unique values preserving the row
     basinIDs = gdf_nan_cleaned['basinID'].to_numpy()
     basinIDsunique = pd.unique(gdf_nan_cleaned['basinID'])
-    #Get numpy array from the dataframe for all data as well as for the Basin ID and weights, both together does not work :-(
-    datacellsextracted = gdf_nan_cleaned.loc[:, datacols[
-        0]:datacols[-1]].to_numpy() * gdf_nan_cleaned['gridcellarea'][0]
-    #Multiply by cellweights and add basinID
-    datacellweighted = datacellsextracted * cellweights[:, None]  #http://scipy-lectures.org/advanced/advanced_numpy/#broadcasting
-    #add the weights
-    datacellweighted = np.hstack((datacellweighted,
-                                           cellweights.reshape(-1, 1)))
-    #add basinIDs as a new column
-    datacellweighted = np.hstack((datacellweighted,
-                                           basinIDs.reshape(-1, 1)))
+    # add the information on cellweights on the clipped cells
+    datacellsextracted=gdf_nan_cleaned.loc[:, datacols[0]:datacols[-1]]
+    #mulitply by cellweights    
+    datacellsextracted=datacellsextracted.multiply(cellweights, axis="index")
+    #add basin 1D
+    datacellsextracted['basin_id']=basinIDs
+
     #Finally we sum each row to get value for each polygon and each time step https://docs.scipy.org/doc/numpy/reference/generated/numpy.ufunc.reduceat.html
+    datacellweighted=datacellsextracted.to_numpy()
     polyg_values = np.add.reduceat(
         datacellweighted,
         np.r_[0, np.where(np.diff(datacellweighted[:, -1]))[0] + 1],
         axis=0)
-    #Compute the average weight
-    polyg_values[:, -2] = polyg_values[:, -2] * basinIDsunique / polyg_values[:,-1]
     #replace sum of unique basin id by actual basin id
     polyg_values[:, -1] = basinIDsunique
+    '''
     #retrieve output_area
     polygonarea = np.vstack((gdfbnd['basinID'].to_numpy(),
                              gdfbnd.area.to_numpy())).T
@@ -294,6 +290,7 @@ def compute_polyg_values(gdfclip,
     polyg_values[:, :len(datacols)] = (
         polyg_values[:, :len(datacols)].T /
         polyg_values[:, -1]).T
+    '''
     # output if desired
     if Output == True:
         # try to create the directory
@@ -306,14 +303,14 @@ def compute_polyg_values(gdfclip,
         leading_zeros=int(np.ceil(np.log(len(polyg_values))))
         for polyg_value in polyg_values:
             # add a cell string with leading zeros
-            cell_id_str=str(int(polyg_value[-2])).zfill(leading_zeros)
+            cell_id_str=str(int(polyg_value[-1])).zfill(leading_zeros)
+            basin_area=gdfbnd.loc[gdfbnd.basinID==int(polyg_value[-1]),'Shape_Area'].values[0]
             with open(
                     '.\Data\\' + outpt_nm +'_'+ cell_id_str +'.csv',
                     'w',
                     newline='') as fout:
-                fout.write('basin ID: {:d}\n'.format(int(polyg_value[-2])))
-                fout.write('average_cellweight: {0:.3f}\n'.format(polyg_value[-3]))
-                fout.write('basin_area: {0:.3f}\n'.format(polyg_value[-1]))
+                fout.write('basin ID: {:d}\n'.format(int(polyg_value[-1])))
+                fout.write('basin_area: {0:.3f}\n'.format(basin_area))
                 fout.write('Time[yymmddhh],'+header+'\n')
                 np.savetxt(
                     fout,
@@ -331,9 +328,7 @@ def compute_polyg_values(gdfclip,
                 polyg_values[:, -2].argsort()]
             for i in range(0, len(datacols)):
                 gdfbnd[datacols[i]] = polyg_valuessorted[:, i]
-            gdfbnd['BasinIDNew'] = polyg_valuessorted[:, -2]
-            gdfbnd['average_cellweight'] = polyg_valuessorted[:, -3]
-            gdfbnd['basin_area'] = polyg_valuessorted[:, -1]
+            gdfbnd['BasinIDNew'] = polyg_valuessorted[:, -1]
             gdfbnd.to_file(
                 os.path.join(os.getcwd(), 'Data', 'polygon_values_'+header+'.shp'))
 
