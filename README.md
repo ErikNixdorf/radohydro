@@ -16,6 +16,7 @@ Radohydro is a small python tool which processes time series precipitation recor
 * until now supports only download of hourly datasets and full day downloads
 * for more than 500 precipation records(~21days), output as shp is not supported (dbase problem)
 * large amounts of polygons per shapefile (>10000) may lead to considerable performance decrease
+* WARNING: geopandas >0.7.0 may cause trouble on windows machines by using overlay function
 
 
 ## Quickstart
