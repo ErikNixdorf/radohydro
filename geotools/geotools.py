@@ -294,17 +294,14 @@ def compute_polyg_values(gdfclip,
     # output if desired
     if Output == True:
         # try to create the directory
-        try:
-            os.mkdir('Data')
-        except OSError:
-            pass
+        os.makedirs('Data',exist_ok=True)
 
         #write out the numpy array
         leading_zeros=int(np.ceil(np.log(len(polyg_values))))
         for polyg_value in polyg_values:
             # add a cell string with leading zeros
             cell_id_str=str(int(polyg_value[-1])).zfill(leading_zeros)
-            basin_area=gdfbnd.loc[gdfbnd.basinID==int(polyg_value[-1]),'Shape_Area'].values[0]
+            basin_area=gdfbnd.loc[gdfbnd.basinID==int(polyg_value[-1])].geometry.area.values[0]
             with open(
                     '.\Data\\' + outpt_nm +'_'+ cell_id_str +'.csv',
                     'w',
