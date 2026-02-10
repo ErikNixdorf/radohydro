@@ -1,4 +1,4 @@
-geopandas==0.7.0
+geopandas==1.1.2
 Fiona==1.8.13
 affine==2.3.0
 pandas==1.0.5
